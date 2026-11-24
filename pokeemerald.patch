@@ -48,6 +48,27 @@ index 3799a87a4..eb05e1be1 100644
  
  enum
  {
+diff --git a/src/battle_controller_player.c b/src/battle_controller_player.c
+index 45bf1a17e..648dec975 100644
+--- a/src/battle_controller_player.c
++++ b/src/battle_controller_player.c
+@@ -303,6 +303,16 @@ static void HandleInputChooseAction(void)
+             ActionSelectionCreateCursorAt(gActionSelectionCursor[gActiveBattler], 0);
+         }
+     }
++    else if (JOY_NEW(B_BUTTON)
++     && !(gBattleTypeFlags & (BATTLE_TYPE_TRAINER
++                            | BATTLE_TYPE_LINK
++                            | BATTLE_TYPE_RECORDED_LINK)))
++    {
++          PlaySE(SE_SELECT);
++          ActionSelectionDestroyCursorAt(gActionSelectionCursor[gActiveBattler]);
++          gActionSelectionCursor[gActiveBattler] = 3;
++          ActionSelectionCreateCursorAt(gActionSelectionCursor[gActiveBattler], 0);
++    }
+     else if (JOY_NEW(B_BUTTON) || gPlayerDpadHoldFrames > 59)
+     {
+         if ((gBattleTypeFlags & BATTLE_TYPE_DOUBLE)
 diff --git a/src/berry_crush.c b/src/berry_crush.c
 index d1ca6920a..9a042da01 100644
 --- a/src/berry_crush.c

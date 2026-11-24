@@ -10,6 +10,18 @@ index 2dff51e1e..dc0b43ce1 100644
  
  #define OPTIONS_SOUND_MONO 0
  #define OPTIONS_SOUND_STEREO 1
+diff --git a/include/dns.h b/include/dns.h
+new file mode 100644
+index 000000000..02497f5d4
+--- /dev/null
++++ b/include/dns.h
+@@ -0,0 +1,6 @@
++#ifndef GUARD_DNS_H
++#define GUARD_DNS_H
++
++void LoadPaletteWithDNS(const void *src, u16 offset, u16 size);
++
++#endif // GUARD_DNS_H
 diff --git a/include/global.h b/include/global.h
 index f62485065..c24be65f2 100644
 --- a/include/global.h
@@ -111,6 +123,138 @@ index 147550416..88c65bc43 100644
  };
  static const u16 sFont_Braille[] = INCGFX_U16("graphics/fonts/braille.png", ".fwjpnfont");
  
+diff --git a/src/dns.c b/src/dns.c
+new file mode 100644
+index 000000000..62fba3287
+--- /dev/null
++++ b/src/dns.c
+@@ -0,0 +1,105 @@
++#include "global.h"
++#include "dns.h"
++#include "overworld.h"
++#include "palette.h"
++#include "rtc.h"
++#include "constants/rgb.h"
++
++#define TINT_MORNING  Q_8_8(0.95), Q_8_8(1.00), Q_8_8(0.85)
++#define TINT_DAY      Q_8_8(1.00), Q_8_8(1.00), Q_8_8(1.00)
++#define TINT_EVENING  Q_8_8(1.00), Q_8_8(0.80), Q_8_8(0.60)
++#define TINT_TWILIGHT Q_8_8(0.90), Q_8_8(0.60), Q_8_8(0.95)
++#define TINT_NIGHT    Q_8_8(0.45), Q_8_8(0.45), Q_8_8(0.95)
++
++static const u16 sTimeOfDayTints[24][3] =
++{
++    [0]  = {TINT_NIGHT},
++    [1]  = {TINT_NIGHT},
++    [2]  = {TINT_NIGHT},
++    [3]  = {TINT_NIGHT},
++    [4]  = {TINT_NIGHT},
++    [5]  = {TINT_TWILIGHT},
++    [6]  = {TINT_MORNING},
++    [7]  = {TINT_MORNING},
++    [8]  = {TINT_DAY},
++    [9]  = {TINT_DAY},
++    [10] = {TINT_DAY},
++    [11] = {TINT_DAY},
++    [12] = {TINT_DAY},
++    [13] = {TINT_DAY},
++    [14] = {TINT_DAY},
++    [15] = {TINT_DAY},
++    [16] = {TINT_DAY},
++    [17] = {TINT_DAY},
++    [18] = {TINT_EVENING},
++    [19] = {TINT_EVENING},
++    [20] = {TINT_TWILIGHT},
++    [21] = {TINT_NIGHT},
++    [22] = {TINT_NIGHT},
++    [23] = {TINT_NIGHT}
++};
++
++static void GetCurrentTint(u16 *tint)
++{
++    s32 hour, nextHour, minute;
++    s32 i;
++
++    RtcCalcLocalTime();
++
++    hour = gLocalTime.hours;
++    minute = gLocalTime.minutes;
++
++    if (hour < 0 || hour >= 24 || minute < 0 || minute >= 60)
++    {
++        tint[0] = Q_8_8(1.0);
++        tint[1] = Q_8_8(1.0);
++        tint[2] = Q_8_8(1.0);
++        return;
++    }
++
++    nextHour = (hour + 1) % 24;
++    for (i = 0; i < 3; i++) {
++        s32 from = sTimeOfDayTints[hour][i];
++        s32 to = sTimeOfDayTints[nextHour][i];
++        tint[i] = from + (to - from) * minute / 60;
++    }
++}
++
++void ApplyDNSTint(u16 *palette, u16 count, const u16 *tint)
++{
++    u16 i;
++
++    for (i = 0; i < count; i++) 
++    {
++        u16 color = palette[i];
++        u16 r = (GET_R(color) * tint[0]) >> 8;
++        u16 g = (GET_G(color) * tint[1]) >> 8;
++        u16 b = (GET_B(color) * tint[2]) >> 8;
++
++        palette[i] = RGB(r, g, b);
++    }
++}
++
++void LoadPaletteWithDNS(const void *src, u16 offset, u16 size)
++{
++    u16 tint[3];
++
++    LoadPalette(src, offset, size);
++
++    if (!IsMapTypeOutdoors(gMapHeader.mapType))
++      return;
++
++    GetCurrentTint(tint);
++
++    ApplyDNSTint(
++     gPlttBufferUnfaded + offset,
++     size / sizeof(u16),
++     tint
++    );
++
++    CpuCopy16(
++        gPlttBufferUnfaded + offset,
++        gPlttBufferFaded + offset,
++        size
++    );
++}
+diff --git a/src/event_object_movement.c b/src/event_object_movement.c
+index 02e1fced7..65a51218f 100644
+--- a/src/event_object_movement.c
++++ b/src/event_object_movement.c
+@@ -3,6 +3,7 @@
+ #include "battle_pyramid.h"
+ #include "berry.h"
+ #include "decoration.h"
++#include "dns.h"
+ #include "event_data.h"
+ #include "event_object_movement.h"
+ #include "event_scripts.h"
+@@ -2045,7 +2046,7 @@ void PatchObjectPalette(u16 paletteTag, u8 paletteSlot)
+     // paletteTag is assumed to exist in sObjectEventSpritePalettes
+     u8 paletteIndex = FindObjectEventPaletteIndexByTag(paletteTag);
+ 
+-    LoadPalette(sObjectEventSpritePalettes[paletteIndex].data, OBJ_PLTT_ID(paletteSlot), PLTT_SIZE_4BPP);
++    LoadPaletteWithDNS(sObjectEventSpritePalettes[paletteIndex].data, OBJ_PLTT_ID(paletteSlot), PLTT_SIZE_4BPP);
+ }
+ 
+ void PatchObjectPaletteRange(const u16 *paletteTags, u8 minSlot, u8 maxSlot)
 diff --git a/src/field_player_avatar.c b/src/field_player_avatar.c
 index 5b22ff74c..516311ba9 100644
 --- a/src/field_player_avatar.c
@@ -125,6 +269,33 @@ index 5b22ff74c..516311ba9 100644
       && IsRunningDisallowed(gObjectEvents[gPlayerAvatar.objectEventId].currentMetatileBehavior) == 0)
      {
          PlayerRun(direction);
+diff --git a/src/fieldmap.c b/src/fieldmap.c
+index 258947a03..d7e136906 100644
+--- a/src/fieldmap.c
++++ b/src/fieldmap.c
+@@ -1,6 +1,7 @@
+ #include "global.h"
+ #include "battle_pyramid.h"
+ #include "bg.h"
++#include "dns.h"
+ #include "fieldmap.h"
+ #include "fldeff.h"
+ #include "fldeff_misc.h"
+@@ -837,12 +838,12 @@ static void LoadTilesetPalette(struct Tileset const *tileset, u16 destOffset, u1
+         if (tileset->isSecondary == FALSE)
+         {
+             LoadPalette(&black, destOffset, PLTT_SIZEOF(1));
+-            LoadPalette(tileset->palettes[0] + 1, destOffset + 1, size - PLTT_SIZEOF(1));
++            LoadPaletteWithDNS(tileset->palettes[0] + 1, destOffset + 1, size - PLTT_SIZEOF(1));
+             ApplyGlobalTintToPaletteEntries(destOffset + 1, (size - PLTT_SIZEOF(1)) >> 1);
+         }
+         else if (tileset->isSecondary == TRUE)
+         {
+-            LoadPalette(tileset->palettes[NUM_PALS_IN_PRIMARY], destOffset, size);
++            LoadPaletteWithDNS(tileset->palettes[NUM_PALS_IN_PRIMARY], destOffset, size);
+             ApplyGlobalTintToPaletteEntries(destOffset, size >> 1);
+         }
+         else
 diff --git a/src/menu.c b/src/menu.c
 index 094ccd7aa..2429f3adb 100644
 --- a/src/menu.c

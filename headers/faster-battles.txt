@@ -1,3 +1,5 @@
 Feature: faster-battles
-Description: Speeds up battle animations (intros only at present). Code ported from Modern Emerald
+Description: Various battle speed-ups. Wild Pokemon battle intro speedups are
+partially ported from Modern Emerald and pokeemerald-expansion with
+additional improvements.
 Dependencies: none

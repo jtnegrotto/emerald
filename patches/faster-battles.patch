@@ -1,7 +1,40 @@
 Feature: faster-battles
-Description: Speeds up battle animations (intros only at present). Code ported from Modern Emerald
+Description: Various battle speed-ups. Wild Pokemon battle intro speedups are
+partially ported from Modern Emerald and pokeemerald-expansion with
+additional improvements.
 Dependencies: none
 
+diff --git a/data/battle_scripts_1.s b/data/battle_scripts_1.s
+index d7733eb0e..c300026ca 100644
+--- a/data/battle_scripts_1.s
++++ b/data/battle_scripts_1.s
+@@ -3050,22 +3050,22 @@ BattleScript_FrontierTrainerBattleWon_End:
+ BattleScript_SmokeBallEscape::
+ 	playanimation BS_ATTACKER, B_ANIM_SMOKEBALL_ESCAPE
+ 	printstring STRINGID_PKMNFLEDUSINGITS
+-	waitmessage B_WAIT_TIME_LONG
++	waitmessage B_WAIT_TIME_SHORT
+ 	end2
+ 
+ BattleScript_RanAwayUsingMonAbility::
+ 	printstring STRINGID_PKMNFLEDUSING
+-	waitmessage B_WAIT_TIME_LONG
++	waitmessage B_WAIT_TIME_SHORT
+ 	end2
+ 
+ BattleScript_GotAwaySafely::
+ 	printstring STRINGID_GOTAWAYSAFELY
+-	waitmessage B_WAIT_TIME_LONG
++	waitmessage B_WAIT_TIME_SHORT
+ 	end2
+ 
+ BattleScript_WildMonFled::
+ 	printstring STRINGID_WILDPKMNFLED
+-	waitmessage B_WAIT_TIME_LONG
++	waitmessage B_WAIT_TIME_SHORT
+ 	end2
+ 
+ BattleScript_PrintCantRunFromTrainer::
 diff --git a/include/battle_anim.h b/include/battle_anim.h
 index cc84b88e6..eaf0aa3c2 100644
 --- a/include/battle_anim.h
@@ -119,7 +152,7 @@ index 15093c22d..3ce688a48 100644
  {
      int i;
 diff --git a/src/battle_main.c b/src/battle_main.c
-index 11fc16860..9b59dd476 100644
+index 11fc16860..e357afa58 100644
 --- a/src/battle_main.c
 +++ b/src/battle_main.c
 @@ -642,21 +642,25 @@ static void CB2_InitBattleInternal(void)
@@ -146,14 +179,14 @@ index 11fc16860..9b59dd476 100644
 +                gScanlineEffectRegBuffers[0][i] = 0xF0;
 +                gScanlineEffectRegBuffers[1][i] = 0xF0;
 +            }
- 
--        ScanlineEffect_SetParams(sIntroScanlineParams16Bit);
++
 +            for (; i < DISPLAY_HEIGHT; i++)
 +            {
 +                gScanlineEffectRegBuffers[0][i] = 0xFF10;
 +                gScanlineEffectRegBuffers[1][i] = 0xFF10;
 +            }
-+
+ 
+-        ScanlineEffect_SetParams(sIntroScanlineParams16Bit);
 +            ScanlineEffect_SetParams(sIntroScanlineParams16Bit);
 +        }
      }
@@ -203,3 +236,156 @@ index 11fc16860..9b59dd476 100644
      }
  }
  
+@@ -3390,6 +3403,37 @@ static void BattleIntroPrepareBackgroundSlide(void)
+     }
+ }
+ 
++static bool8 IsBattleIntroPlayerBusy(void)
++{
++    if (ShouldUseFastBattleIntro())
++    {
++        u8 battler = GetBattlerAtPosition(B_POSITION_PLAYER_LEFT);
++        return (gBattleControllerExecFlags & gBitTable[battler]) != 0;
++    }
++
++    return gBattleControllerExecFlags != 0;
++}
++
++static bool8 CanOverlapIntroSendOut(void)
++{
++    u8 player, opponent;
++
++    if (!ShouldUseFastBattleIntro())
++        return FALSE;
++
++    player = GetBattlerAtPosition(B_POSITION_PLAYER_LEFT);
++    opponent = GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT);
++
++    if (IsMonShiny(&gPlayerParty[gBattlerPartyIndexes[player]])
++     || IsMonShiny(&gEnemyParty[gBattlerPartyIndexes[opponent]]))
++        return FALSE;
++
++    if (IsCryPlayingOrClearCrySongs())
++        return FALSE;
++
++    return TRUE;
++}
++
+ static void BattleIntroDrawTrainersOrMonsSprites(void)
+ {
+     u8 *ptr;
+@@ -3485,7 +3529,11 @@ static void BattleIntroDrawTrainersOrMonsSprites(void)
+         if (gBattleTypeFlags & BATTLE_TYPE_ARENA)
+             BattleArena_InitPoints();
+     }
+-    gBattleMainFunc = BattleIntroDrawPartySummaryScreens;
++
++    if (ShouldUseFastBattleIntro())
++        gBattleMainFunc = BattleIntroPrintWildMonAttacked;
++    else
++        gBattleMainFunc = BattleIntroDrawPartySummaryScreens;
+ }
+ 
+ static void BattleIntroDrawPartySummaryScreens(void)
+@@ -3573,9 +3621,14 @@ static void BattleIntroPrintTrainerWantsToBattle(void)
+ 
+ static void BattleIntroPrintWildMonAttacked(void)
+ {
+-    if (gBattleControllerExecFlags == 0)
++    if (!IsBattleIntroPlayerBusy())
+     {
+-        gBattleMainFunc = BattleIntroPrintPlayerSendsOut;
++        if (ShouldUseFastBattleIntro()
++         && !(gBattleTypeFlags & BATTLE_TYPE_LEGENDARY))
++            gBattleMainFunc = BattleIntroPlayer1SendsOutMonAnimation;
++        else
++            gBattleMainFunc = BattleIntroPrintPlayerSendsOut;
++
+         PrepareStringBattle(STRINGID_INTROMSG, 0);
+     }
+ }
+@@ -3710,7 +3763,7 @@ static void UNUSED BattleIntroSkipRecordMonsToDex(void)
+ 
+ static void BattleIntroPrintPlayerSendsOut(void)
+ {
+-    if (gBattleControllerExecFlags == 0)
++    if (!IsBattleIntroPlayerBusy())
+     {
+         u8 position;
+ 
+@@ -3793,8 +3846,15 @@ static void BattleIntroPlayer1SendsOutMonAnimation(void)
+         position = B_POSITION_PLAYER_LEFT;
+     }
+ 
+-    if (gBattleControllerExecFlags)
++    if (CanOverlapIntroSendOut())
++    {
++        if (IsBattleIntroPlayerBusy())
++            return;
++    }
++    else if (gBattleControllerExecFlags)
++    {
+         return;
++    }
+ 
+     for (gActiveBattler = 0; gActiveBattler < gBattlersCount; gActiveBattler++)
+     {
+diff --git a/src/battle_message.c b/src/battle_message.c
+index a15a4b976..23960ce74 100644
+--- a/src/battle_message.c
++++ b/src/battle_message.c
+@@ -381,6 +381,7 @@ static const u8 sText_OpponentMon1Appeared[] = _("{B_OPPONENT_MON1_NAME} appeare
+ static const u8 sText_WildPkmnAppeared[] = _("Wild {B_OPPONENT_MON1_NAME} appeared!\p");
+ static const u8 sText_LegendaryPkmnAppeared[] = _("Wild {B_OPPONENT_MON1_NAME} appeared!\p");
+ static const u8 sText_WildPkmnAppearedPause[] = _("Wild {B_OPPONENT_MON1_NAME} appeared!{PAUSE 127}");
++static const u8 sText_FastWildIntro[] = _("Wild {B_OPPONENT_MON1_NAME} appeared!\nGo! {B_PLAYER_MON1_NAME}!");
+ static const u8 sText_TwoWildPkmnAppeared[] = _("Wild {B_OPPONENT_MON1_NAME} and\n{B_OPPONENT_MON2_NAME} appeared!\p");
+ static const u8 sText_Trainer1WantsToBattle[] = _("{B_TRAINER1_CLASS} {B_TRAINER1_NAME}\nwould like to battle!\p");
+ static const u8 sText_LinkTrainerWantsToBattle[] = _("{B_LINK_OPPONENT1_NAME}\nwants to battle!");
+@@ -2023,10 +2024,12 @@ void BufferStringBattle(u16 stringID)
+         {
+             if (gBattleTypeFlags & BATTLE_TYPE_LEGENDARY)
+                 stringPtr = sText_LegendaryPkmnAppeared;
+-            else if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) // interesting, looks like they had something planned for wild double battles
++            else if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE)
+                 stringPtr = sText_TwoWildPkmnAppeared;
+             else if (gBattleTypeFlags & BATTLE_TYPE_WALLY_TUTORIAL)
+                 stringPtr = sText_WildPkmnAppearedPause;
++            else if (ShouldUseFastBattleIntro())
++                stringPtr = sText_FastWildIntro;
+             else
+                 stringPtr = sText_WildPkmnAppeared;
+         }
+diff --git a/src/battle_transition.c b/src/battle_transition.c
+index 59fb57ef2..589429ce8 100644
+--- a/src/battle_transition.c
++++ b/src/battle_transition.c
+@@ -737,7 +737,7 @@ static const TransitionStateFunc sWhiteBarsFade_Funcs[] =
+ };
+ 
+ #define NUM_WHITE_BARS 8
+-static const s16 sWhiteBarsFade_StartDelays[NUM_WHITE_BARS] = {0, 20, 15, 40, 10, 25, 35, 5};
++static const s16 sWhiteBarsFade_StartDelays[NUM_WHITE_BARS] = {0, 8, 6, 15, 4, 9, 13, 3};
+ 
+ static const TransitionStateFunc sGridSquares_Funcs[] =
+ {
+@@ -1118,7 +1118,7 @@ static void Task_Intro(u8 taskId)
+     if (gTasks[taskId].tState == 0)
+     {
+         gTasks[taskId].tState++;
+-        CreateIntroTask(0, 0, 3, 2, 2);
++        CreateIntroTask(0, 0, 2, 4, 4);
+     }
+     else if (IsIntroTaskDone())
+     {
+@@ -1156,8 +1156,8 @@ static bool8 Blur_Main(struct Task *task)
+     }
+     else
+     {
+-        task->tDelay = 4;
+-        if (++task->tCounter == 10)
++        task->tDelay = 1;
++        if (++task->tCounter == 6)
+             BeginNormalPaletteFade(PALETTES_ALL, -1, 0, 16, RGB_BLACK);
+         SetGpuReg(REG_OFFSET_MOSAIC, (task->tCounter & 15) * 17);
+         if (task->tCounter > 14)

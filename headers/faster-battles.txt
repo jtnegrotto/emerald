@@ -1,0 +1,3 @@
+Feature: faster-battles
+Description: Speeds up battle animations (intros only at present). Code ported from Modern Emerald
+Dependencies: none

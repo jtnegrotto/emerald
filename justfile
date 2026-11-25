@@ -13,6 +13,7 @@ features := [
   "default-set",
   "instant-text",
   "day-night-system",
+  "faster-battles",
 ]
 
 default: build-all

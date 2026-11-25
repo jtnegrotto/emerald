@@ -1,0 +1,175 @@
+Feature: scrollable-options
+Description: Allows the options menu to scroll vertically
+Dependencies: none
+
+diff --git a/src/option_menu.c b/src/option_menu.c
+index 1b1d1c10a..60ac52fa8 100644
+--- a/src/option_menu.c
++++ b/src/option_menu.c
+@@ -16,6 +16,10 @@
+ #include "gba/m4a_internal.h"
+ #include "constants/rgb.h"
+ 
++#define VISIBLE_MENU_ITEMS 7
++
++EWRAM_DATA static u8 sMenuScrollOffset = 0;
++
+ #define tMenuSelection data[0]
+ #define tTextSpeed data[1]
+ #define tBattleSceneOff data[2]
+@@ -42,12 +46,12 @@ enum
+     WIN_OPTIONS
+ };
+ 
+-#define YPOS_TEXTSPEED    (MENUITEM_TEXTSPEED * 16)
+-#define YPOS_BATTLESCENE  (MENUITEM_BATTLESCENE * 16)
+-#define YPOS_BATTLESTYLE  (MENUITEM_BATTLESTYLE * 16)
+-#define YPOS_SOUND        (MENUITEM_SOUND * 16)
+-#define YPOS_BUTTONMODE   (MENUITEM_BUTTONMODE * 16)
+-#define YPOS_FRAMETYPE    (MENUITEM_FRAMETYPE * 16)
++#define YPOS_TEXTSPEED    ((MENUITEM_TEXTSPEED - sMenuScrollOffset) * 16)
++#define YPOS_BATTLESCENE  ((MENUITEM_BATTLESCENE - sMenuScrollOffset) * 16)
++#define YPOS_BATTLESTYLE  ((MENUITEM_BATTLESTYLE - sMenuScrollOffset) * 16)
++#define YPOS_SOUND        ((MENUITEM_SOUND - sMenuScrollOffset) * 16)
++#define YPOS_BUTTONMODE   ((MENUITEM_BUTTONMODE - sMenuScrollOffset) * 16)
++#define YPOS_FRAMETYPE    ((MENUITEM_FRAMETYPE - sMenuScrollOffset) * 16)
+ 
+ static void Task_OptionMenuFadeIn(u8 taskId);
+ static void Task_OptionMenuProcessInput(u8 taskId);
+@@ -69,6 +73,8 @@ static void ButtonMode_DrawChoices(u8 selection);
+ static void DrawHeaderText(void);
+ static void DrawOptionMenuTexts(void);
+ static void DrawBgWindowFrames(void);
++static void DrawVisibleOptionChoices(u8 taskId);
++static void UpdateOptionMenuScroll(u8 taskId);
+ 
+ EWRAM_DATA static bool8 sArrowPressed = FALSE;
+ 
+@@ -216,6 +222,7 @@ void CB2_InitOptionMenu(void)
+         gMain.state++;
+         break;
+     case 8:
++        sMenuScrollOffset = 0;
+         PutWindowTilemap(WIN_OPTIONS);
+         DrawOptionMenuTexts();
+         gMain.state++;
+@@ -235,12 +242,7 @@ void CB2_InitOptionMenu(void)
+         gTasks[taskId].tButtonMode = gSaveBlock2Ptr->optionsButtonMode;
+         gTasks[taskId].tWindowFrameType = gSaveBlock2Ptr->optionsWindowFrameType;
+ 
+-        TextSpeed_DrawChoices(gTasks[taskId].tTextSpeed);
+-        BattleScene_DrawChoices(gTasks[taskId].tBattleSceneOff);
+-        BattleStyle_DrawChoices(gTasks[taskId].tBattleStyle);
+-        Sound_DrawChoices(gTasks[taskId].tSound);
+-        ButtonMode_DrawChoices(gTasks[taskId].tButtonMode);
+-        FrameType_DrawChoices(gTasks[taskId].tWindowFrameType);
++        DrawVisibleOptionChoices(taskId);
+         HighlightOptionMenuItem(gTasks[taskId].tMenuSelection);
+ 
+         CopyWindowToVram(WIN_OPTIONS, COPYWIN_FULL);
+@@ -278,7 +280,7 @@ static void Task_OptionMenuProcessInput(u8 taskId)
+             gTasks[taskId].tMenuSelection--;
+         else
+             gTasks[taskId].tMenuSelection = MENUITEM_CANCEL;
+-        HighlightOptionMenuItem(gTasks[taskId].tMenuSelection);
++        UpdateOptionMenuScroll(taskId);
+     }
+     else if (JOY_NEW(DPAD_DOWN))
+     {
+@@ -286,7 +288,7 @@ static void Task_OptionMenuProcessInput(u8 taskId)
+             gTasks[taskId].tMenuSelection++;
+         else
+             gTasks[taskId].tMenuSelection = 0;
+-        HighlightOptionMenuItem(gTasks[taskId].tMenuSelection);
++        UpdateOptionMenuScroll(taskId);
+     }
+     else
+     {
+@@ -373,8 +375,10 @@ static void Task_OptionMenuFadeOut(u8 taskId)
+ 
+ static void HighlightOptionMenuItem(u8 index)
+ {
++    u8 visibleIndex = index - sMenuScrollOffset;
++
+     SetGpuReg(REG_OFFSET_WIN0H, WIN_RANGE(16, DISPLAY_WIDTH - 16));
+-    SetGpuReg(REG_OFFSET_WIN0V, WIN_RANGE(index * 16 + 40, index * 16 + 56));
++    SetGpuReg(REG_OFFSET_WIN0V, WIN_RANGE(visibleIndex * 16 + 40, visibleIndex * 16 + 56));
+ }
+ 
+ static void DrawOptionMenuChoice(const u8 *text, u8 x, u8 y, u8 style)
+@@ -627,9 +631,24 @@ static void DrawOptionMenuTexts(void)
+     u8 i;
+ 
+     FillWindowPixelBuffer(WIN_OPTIONS, PIXEL_FILL(1));
+-    for (i = 0; i < MENUITEM_COUNT; i++)
+-        AddTextPrinterParameterized(WIN_OPTIONS, FONT_NORMAL, sOptionMenuItemsNames[i], 8, (i * 16) + 1, TEXT_SKIP_DRAW, NULL);
+-    CopyWindowToVram(WIN_OPTIONS, COPYWIN_FULL);
++
++    for (i = 0; i < VISIBLE_MENU_ITEMS; i++)
++    {
++        u8 item = sMenuScrollOffset + i;
++
++        if (item >= MENUITEM_COUNT)
++            break;
++
++        AddTextPrinterParameterized(
++            WIN_OPTIONS,
++            FONT_NORMAL,
++            sOptionMenuItemsNames[item],
++            8,
++            (i * 16) + 1,
++            TEXT_SKIP_DRAW,
++            NULL
++        );
++    }
+ }
+ 
+ #define TILE_TOP_CORNER_L 0x1A2
+@@ -666,3 +685,47 @@ static void DrawBgWindowFrames(void)
+ 
+     CopyBgTilemapBufferToVram(1);
+ }
++
++static void DrawVisibleOptionChoices(u8 taskId)
++{
++    u8 first = sMenuScrollOffset;
++    u8 last = first + VISIBLE_MENU_ITEMS;
++
++    if (MENUITEM_TEXTSPEED >= first && MENUITEM_TEXTSPEED < last)
++        TextSpeed_DrawChoices(gTasks[taskId].tTextSpeed);
++
++    if (MENUITEM_BATTLESCENE >= first && MENUITEM_BATTLESCENE < last)
++        BattleScene_DrawChoices(gTasks[taskId].tBattleSceneOff);
++
++    if (MENUITEM_BATTLESTYLE >= first && MENUITEM_BATTLESTYLE < last)
++        BattleStyle_DrawChoices(gTasks[taskId].tBattleStyle);
++
++    if (MENUITEM_SOUND >= first && MENUITEM_SOUND < last)
++        Sound_DrawChoices(gTasks[taskId].tSound);
++
++    if (MENUITEM_BUTTONMODE >= first && MENUITEM_BUTTONMODE < last)
++        ButtonMode_DrawChoices(gTasks[taskId].tButtonMode);
++
++    if (MENUITEM_FRAMETYPE >= first && MENUITEM_FRAMETYPE < last)
++        FrameType_DrawChoices(gTasks[taskId].tWindowFrameType);
++}
++
++static void UpdateOptionMenuScroll(u8 taskId)
++{
++    u8 selection = gTasks[taskId].tMenuSelection;
++    u8 prevScrollOffset = sMenuScrollOffset;
++
++    if (selection < sMenuScrollOffset)
++        sMenuScrollOffset = selection;
++    else if (selection >= sMenuScrollOffset + VISIBLE_MENU_ITEMS)
++        sMenuScrollOffset = selection - VISIBLE_MENU_ITEMS + 1;
++
++    if (prevScrollOffset != sMenuScrollOffset)
++    {
++        DrawOptionMenuTexts();
++        DrawVisibleOptionChoices(taskId);
++        CopyWindowToVram(WIN_OPTIONS, COPYWIN_FULL);
++    }
++
++    HighlightOptionMenuItem(selection);
++}

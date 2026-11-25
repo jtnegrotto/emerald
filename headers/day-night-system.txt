@@ -1,0 +1,3 @@
+Feature: day-night-system
+Description: Applies tints to overworld palettes based on time of day
+Dependencies: none

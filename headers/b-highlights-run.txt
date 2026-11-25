@@ -1,0 +1,3 @@
+Feature: b-highlights-run
+Description: Pressing B in the action menu during a wild battle moves the cursor to "Run"
+Dependencies: none

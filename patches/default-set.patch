@@ -1,0 +1,17 @@
+Feature: default-set
+Description: Changes the default battle style from Shift to Set
+Dependencies: none
+
+diff --git a/src/new_game.c b/src/new_game.c
+index 80746561b..0cffe92ed 100644
+--- a/src/new_game.c
++++ b/src/new_game.c
+@@ -93,7 +93,7 @@ static void SetDefaultOptions(void)
+     gSaveBlock2Ptr->optionsTextSpeed = OPTIONS_TEXT_SPEED_MID;
+     gSaveBlock2Ptr->optionsWindowFrameType = 0;
+     gSaveBlock2Ptr->optionsSound = OPTIONS_SOUND_MONO;
+-    gSaveBlock2Ptr->optionsBattleStyle = OPTIONS_BATTLE_STYLE_SHIFT;
++    gSaveBlock2Ptr->optionsBattleStyle = OPTIONS_BATTLE_STYLE_SET;
+     gSaveBlock2Ptr->optionsBattleSceneOff = FALSE;
+     gSaveBlock2Ptr->regionMapZoom = FALSE;
+ }

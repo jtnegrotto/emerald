@@ -1,0 +1,3 @@
+Feature: indoor-running 
+Description: Allows running indoors
+Dependencies: none

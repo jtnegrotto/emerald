@@ -1,0 +1,3 @@
+Feature: default-set
+Description: Changes the default battle style from Shift to Set
+Dependencies: none

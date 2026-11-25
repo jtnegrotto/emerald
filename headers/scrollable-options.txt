@@ -1,0 +1,3 @@
+Feature: scrollable-options
+Description: Allows the options menu to scroll vertically
+Dependencies: none

@@ -1,0 +1,3 @@
+Feature: instant-text
+Description: Adds "instant" text speed
+Dependencies: none

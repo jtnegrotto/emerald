@@ -1,0 +1,3 @@
+Feature: autorun
+Description: Adds option to always run when wearing running shoes
+Dependencies: scrollable-options

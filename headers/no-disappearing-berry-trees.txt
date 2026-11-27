@@ -1,0 +1,4 @@
+Feature: no-disappearing-berry-trees
+Description: Prevents berry trees from disappearing or resprouting.
+  From https://www.pokecommunity.com/threads/simple-modifications-directory.416647/page-4#post-10142996
+Dependencies: none

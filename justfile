@@ -14,6 +14,7 @@ features := [
   "instant-text",
   "day-night-system",
   "faster-battles",
+  "no-disappearing-berry-trees",
 ]
 
 default: build-all
@@ -55,8 +56,14 @@ build-base-rom: pokeemerald-init
 create-branch FEATURE:
   git -C pokeemerald switch -c "custom/{{ FEATURE }}" {{ pokeemerald-base-commit }}
 
-checkout-branch FEATURE:
+checkout FEATURE:
   git -C pokeemerald checkout "custom/{{ FEATURE }}"
+
+checkout-base:
+  git -C pokeemerald checkout --detach {{ pokeemerald-base-commit }}
+
+make:
+  make -C pokeemerald
 
 gen-git-patch FEATURE:
   #!/bin/bash

@@ -142,7 +142,7 @@ index 1ba42bb17..98b329da6 100644
          {
              if (sprite->y2 != 0)
 diff --git a/src/battle_intro.c b/src/battle_intro.c
-index 15093c22d..64ce00dff 100644
+index 15093c22d..3ce688a48 100644
 --- a/src/battle_intro.c
 +++ b/src/battle_intro.c
 @@ -16,6 +16,7 @@ static void BattleIntroSlide2(u8);
@@ -153,7 +153,7 @@ index 15093c22d..64ce00dff 100644
  
  static const TaskFunc sBattleIntroSlideFuncs[] =
  {
-@@ -34,6 +35,57 @@ static const TaskFunc sBattleIntroSlideFuncs[] =
+@@ -34,6 +35,21 @@ static const TaskFunc sBattleIntroSlideFuncs[] =
  #define tState data[0]
  #define tEnvironment data[1]
  
@@ -172,6 +172,23 @@ index 15093c22d..64ce00dff 100644
 +                               | BATTLE_TYPE_FIRST_BATTLE));
 +}
 +
+ void HandleIntroSlide(u8 environment)
+ {
+     u8 taskId;
+@@ -55,6 +71,9 @@ void HandleIntroSlide(u8 environment)
+         environment = BATTLE_ENVIRONMENT_UNDERWATER;
+         taskId = CreateTask(BattleIntroSlide2, 0);
+     }
++    else if (ShouldUseFastBattleIntro()) {
++        taskId = CreateTask(BattleIntroNoSlide, 0);
++    }
+     else
+     {
+         taskId = CreateTask(sBattleIntroSlideFuncs[environment], 0);
+@@ -83,6 +102,42 @@ static void BattleIntroSlideEnd(u8 taskId)
+     SetGpuReg(REG_OFFSET_WINOUT, WINOUT_WIN01_BG_ALL | WINOUT_WIN01_OBJ | WINOUT_WIN01_CLR | WINOUT_WINOBJ_BG_ALL | WINOUT_WINOBJ_OBJ | WINOUT_WINOBJ_CLR);
+ }
+ 
 +static void BattleIntroNoSlide(u8 taskId)
 +{
 +    switch (gTasks[taskId].tState)
@@ -208,19 +225,9 @@ index 15093c22d..64ce00dff 100644
 +    }
 +}
 +
- void HandleIntroSlide(u8 environment)
+ static void BattleIntroSlide1(u8 taskId)
  {
-     u8 taskId;
-@@ -55,6 +107,9 @@ void HandleIntroSlide(u8 environment)
-         environment = BATTLE_ENVIRONMENT_UNDERWATER;
-         taskId = CreateTask(BattleIntroSlide2, 0);
-     }
-+    else if (ShouldUseFastBattleIntro()) {
-+        taskId = CreateTask(BattleIntroNoSlide, 0);
-+    }
-     else
-     {
-         taskId = CreateTask(sBattleIntroSlideFuncs[environment], 0);
+     int i;
 diff --git a/src/battle_main.c b/src/battle_main.c
 index 11fc16860..e357afa58 100644
 --- a/src/battle_main.c
@@ -459,6 +466,71 @@ index 59fb57ef2..589429ce8 100644
              BeginNormalPaletteFade(PALETTES_ALL, -1, 0, 16, RGB_BLACK);
          SetGpuReg(REG_OFFSET_MOSAIC, (task->tCounter & 15) * 17);
          if (task->tCounter > 14)
+diff --git a/src/berry.c b/src/berry.c
+index c56b91ff0..5eb664d88 100644
+--- a/src/berry.c
++++ b/src/berry.c
+@@ -1061,16 +1061,6 @@ static bool32 BerryTreeGrow(struct BerryTree *tree)
+     case BERRY_STAGE_TALLER:
+         tree->stage++;
+         break;
+-    case BERRY_STAGE_BERRIES:
+-        tree->watered1 = 0;
+-        tree->watered2 = 0;
+-        tree->watered3 = 0;
+-        tree->watered4 = 0;
+-        tree->berryYield = 0;
+-        tree->stage = BERRY_STAGE_SPROUTED;
+-        if (++tree->regrowthCount == 10)
+-            *tree = gBlankBerryTree;
+-        break;
+     }
+     return TRUE;
+ }
+@@ -1084,30 +1074,23 @@ void BerryTreeTimeUpdate(s32 minutes)
+     {
+         tree = &gSaveBlock1Ptr->berryTrees[i];
+ 
+-        if (tree->berry && tree->stage && !tree->stopGrowth)
++        if (tree->berry && tree->stage && !tree->stopGrowth && tree->stage != BERRY_STAGE_BERRIES)
+         {
+-            if (minutes >= GetStageDurationByBerryType(tree->berry) * 71)
+-            {
+-                *tree = gBlankBerryTree;
+-            }
+-            else
+-            {
+-                s32 time = minutes;
++            s32 time = minutes;
+ 
+-                while (time != 0)
++            while (time != 0)
++            {
++                if (tree->minutesUntilNextStage > time)
+                 {
+-                    if (tree->minutesUntilNextStage > time)
+-                    {
+-                        tree->minutesUntilNextStage -= time;
+-                        break;
+-                    }
+-                    time -= tree->minutesUntilNextStage;
+-                    tree->minutesUntilNextStage = GetStageDurationByBerryType(tree->berry);
+-                    if (!BerryTreeGrow(tree))
+-                        break;
+-                    if (tree->stage == BERRY_STAGE_BERRIES)
+-                        tree->minutesUntilNextStage *= 4;
++                    tree->minutesUntilNextStage -= time;
++                    break;
+                 }
++                time -= tree->minutesUntilNextStage;
++                tree->minutesUntilNextStage = GetStageDurationByBerryType(tree->berry);
++                if (!BerryTreeGrow(tree))
++                    break;
++                if (tree->stage == BERRY_STAGE_BERRIES)
++                    tree->minutesUntilNextStage *= 4;
+             }
+         }
+     }
 diff --git a/src/berry_crush.c b/src/berry_crush.c
 index d1ca6920a..9a042da01 100644
 --- a/src/berry_crush.c
